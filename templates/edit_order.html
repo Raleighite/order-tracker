@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Edit Order #{{ order.id }}</h2>
+<form method="POST">
+    <div class="mb-3">
+        <label class="form-label">Vendor</label>
+        <input class="form-control" type="text" name="vendor" value="{{ order.vendor }}" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Tracking Number</label>
+        <input class="form-control" type="text" name="tracking_number" value="{{ order.tracking_number }}">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Status</label>
+        <select class="form-control" name="status">
+            <option value="Pending" {% if order.status == 'Pending' %}selected{% endif %}>Pending</option>
+            <option value="Shipped" {% if order.status == 'Shipped' %}selected{% endif %}>Shipped</option>
+        </select>
+    </div>
+
+    <h5>Items</h5>
+    <div id="items">
+        {% for item in order.items %}
+        <div class="row mb-2 item-row">
+            <div class="col">
+                <input class="form-control" name="product[]" value="{{ item.product }}">
+            </div>
+            <div class="col">
+                <input class="form-control" name="quantity[]" value="{{ item.quantity }}" type="number" min="1">
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <button class="btn btn-secondary mb-3" type="button" onclick="addItem()">+ Add Item</button>
+
+    <button class="btn btn-primary">Save Changes</button>
+</form>
+
+<script>
+function addItem() {
+    const row = document.createElement('div');
+    row.className = "row mb-2 item-row";
+    row.innerHTML = `
+        <div class="col">
+            <input class="form-control" name="product[]" placeholder="Product name">
+        </div>
+        <div class="col">
+            <input class="form-control" name="quantity[]" placeholder="Quantity" type="number" min="1" value="1">
+        </div>`;
+    document.getElementById('items').appendChild(row);
+}
+</script>
+{% endblock %}
