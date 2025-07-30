@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 
 # Set up Flask app
@@ -40,7 +40,7 @@ def view_orders():
     for order in orders:
         order.is_overdue = (
             order.status == 'Pending' and
-            datatime.utcnow() - order.date_ordered > timedelta(days=7)
+            datetime.utcnow() - order.date_ordered > timedelta(days=7)
         )
     return render_template('orders.html', orders=orders)
 
