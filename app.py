@@ -14,7 +14,7 @@ db = SQLAlchemy(app)
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     vendor = db.Column(db.String(100), nullable=False)
-    date_ordered = db.Column(db.DateTime, default=datetime.now)
+    date_ordered = db.Column(db.DateTime, default=datetime.utcnow())
     status = db.Column(db.String(20), default='Pending')
     tracking_number = db.Column(db.String(100))
     items = db.relationship('LineItem', backref='order', cascade="all, delete", lazy=True)
@@ -35,6 +35,13 @@ def index():
 @app.route('/orders')
 def view_orders():
     orders = Order.query.order_by(Order.date_ordered.desc()).all()
+    
+    # Add "overdue" flag to orders with no shipping
+    for order in orders:
+        order.is_overdue = (
+            order.status == 'Pending' and
+            datatime.utcnow() - order.date_ordered > timedelta(days=7)
+        )
     return render_template('orders.html', orders=orders)
 
 # Add new order

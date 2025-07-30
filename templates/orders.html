@@ -15,7 +15,7 @@
     </thead>
     <tbody>
         {% for order in orders %}
-        <tr>
+        <tr class="{% if order.is_overdue %}table-warning{% endif %}">
             <td>{{ order.id }}</td>
             <td>{{ order.vendor }}</td>
             <td>
@@ -26,7 +26,12 @@
                 </ul>
             </td>
             <td>{{ order.date_ordered.strftime('%Y-%m-%d') }}</td>
-            <td>{{ order.status }}</td>
+            <td>
+                {{ order.status }}
+                {% if order.is_overdue %}
+                    <span class="badge bg-danger">Overdue</span>
+                {% endif %}
+            </td>
             <td>{{ order.tracking_number or '-' }}</td>
             <td>
                 <form method="POST" action="{{ url_for('update_order', id=order.id) }}">
