@@ -15,7 +15,7 @@ This lightweight app runs locally and gives you a clear interface to view, updat
 - 🚚 Record shipping status and tracking numbers
 - ⚠️ Highlight overdue unshipped orders (7+ days)
 - 🛠 Edit and delete orders easily
-- 🔐 Runs locally with no cloud dependencies
+- 🔐 Runs locally or in Docker — no cloud dependencies
 - ✅ Automatically tested with GitHub Actions on every push
 
 ---
@@ -26,13 +26,14 @@ This lightweight app runs locally and gives you a clear interface to view, updat
 - [Flask](https://flask.palletsprojects.com/)
 - [SQLite (via SQLAlchemy)](https://docs.sqlalchemy.org/)
 - [Bootstrap 5](https://getbootstrap.com/)
-- [GitHub Actions](https://docs.github.com/en/actions) for CI testing
+- [Docker](https://www.docker.com/)
+- [GitHub Actions](https://docs.github.com/en/actions)
 
 ---
 
 ## 🚀 Getting Started
 
-### 🧰 Setup
+### 🧰 Local Setup (without Docker)
 
 1. **Clone the repo**
    ```bash
@@ -40,7 +41,7 @@ This lightweight app runs locally and gives you a clear interface to view, updat
    cd order-tracker
    ```
 
-2. **Create a virtual environment**
+2. **Create and activate a virtual environment**
    ```bash
    python -m venv venv
    venv\Scripts\activate  # Windows
@@ -58,7 +59,23 @@ This lightweight app runs locally and gives you a clear interface to view, updat
    python app.py
    ```
 
-5. Open your browser to [http://localhost:5000](http://localhost:5000)
+5. Visit [http://localhost:5000](http://localhost:5000)
+
+---
+
+### 🐳 Running with Docker
+
+1. **Build the Docker image**
+   ```bash
+   docker build -t order-tracker .
+   ```
+
+2. **Run the container**
+   ```bash
+   docker run -p 5000:5000 order-tracker
+   ```
+
+3. Visit [http://localhost:5000](http://localhost:5000)
 
 ---
 
@@ -68,7 +85,7 @@ This lightweight app runs locally and gives you a clear interface to view, updat
 python test_app.py
 ```
 
-Tests run automatically on every push via GitHub Actions.
+Or push to GitHub and let [GitHub Actions](https://github.com/Raleighite/order-tracker/actions) run them automatically.
 
 ---
 
