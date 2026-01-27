@@ -1,23 +1,46 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, abort
 from flask_sqlalchemy import SQLAlchemy
+from flask_wtf.csrf import CSRFProtect
 from datetime import datetime, timedelta
 import os
+import secrets
 
 # Set up Flask app
 app = Flask(__name__)
 basedir = os.path.abspath(os.path.dirname(__file__))
+
+# Security: SECRET_KEY from environment or generate one (for dev only)
+# In production, always set FLASK_SECRET_KEY environment variable!
+app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY') or secrets.token_hex(32)
+
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(basedir, 'database.db')}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Security: Enable CSRF protection
+csrf = CSRFProtect(app)
+
 db = SQLAlchemy(app)
+
+# Valid status values (for validation)
+VALID_STATUSES = {'Pending', 'Shipped'}
+
+
+def validate_status(status):
+    """Validate that status is an allowed value."""
+    if status not in VALID_STATUSES:
+        return 'Pending'  # Default to Pending if invalid
+    return status
+
 
 # Order model
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     vendor = db.Column(db.String(100), nullable=False)
-    date_ordered = db.Column(db.DateTime, default=datetime.utcnow())
+    date_ordered = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(20), default='Pending')
     tracking_number = db.Column(db.String(100))
     items = db.relationship('LineItem', backref='order', cascade="all, delete", lazy=True)
+
 
 # Line item model
 class LineItem(db.Model):
@@ -26,16 +49,18 @@ class LineItem(db.Model):
     quantity = db.Column(db.Integer, default=1)
     order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
 
+
 # Home route
 @app.route('/')
 def index():
     return render_template('index.html')
 
+
 # View all orders
 @app.route('/orders')
 def view_orders():
     orders = Order.query.order_by(Order.date_ordered.desc()).all()
-    
+
     # Add "overdue" flag to orders with no shipping
     for order in orders:
         order.is_overdue = (
@@ -44,14 +69,18 @@ def view_orders():
         )
     return render_template('orders.html', orders=orders)
 
+
 # Add new order
 @app.route('/add', methods=['GET', 'POST'])
 def add_order():
     if request.method == 'POST':
         try:
-            vendor = request.form['vendor']
-            status = request.form['status']
-            tracking_number = request.form['tracking_number']
+            vendor = request.form.get('vendor', '').strip()
+            if not vendor:
+                abort(400, description="Vendor is required")
+
+            status = validate_status(request.form.get('status', 'Pending'))
+            tracking_number = request.form.get('tracking_number', '').strip()
 
             new_order = Order(vendor=vendor, status=status, tracking_number=tracking_number)
             db.session.add(new_order)
@@ -61,31 +90,38 @@ def add_order():
             quantities = request.form.getlist('quantity[]')
 
             for product, qty in zip(products, quantities):
-                if not product.strip():
+                product = product.strip()
+                if not product:
                     continue
                 try:
-                    quantity = int(qty)
-                except ValueError:
-                    quantity = 1  # fallback
+                    quantity = max(1, int(qty))  # Ensure at least 1
+                except (ValueError, TypeError):
+                    quantity = 1
                 item = LineItem(product=product, quantity=quantity, order_id=new_order.id)
                 db.session.add(item)
 
             db.session.commit()
             return redirect(url_for('view_orders'))
         except Exception as e:
+            db.session.rollback()
             print("❌ Error while processing order:", e)
-            return render_template('add_order.html')
+            return render_template('add_order.html'), 500
 
     return render_template('add_order.html')
+
 
 # Edit order
 @app.route('/edit/<int:id>', methods=['GET', 'POST'])
 def edit_order(id):
     order = Order.query.get_or_404(id)
     if request.method == 'POST':
-        order.vendor = request.form['vendor']
-        order.status = request.form['status']
-        order.tracking_number = request.form['tracking_number']
+        vendor = request.form.get('vendor', '').strip()
+        if not vendor:
+            abort(400, description="Vendor is required")
+
+        order.vendor = vendor
+        order.status = validate_status(request.form.get('status', 'Pending'))
+        order.tracking_number = request.form.get('tracking_number', '').strip()
 
         LineItem.query.filter_by(order_id=order.id).delete()
 
@@ -93,8 +129,13 @@ def edit_order(id):
         quantities = request.form.getlist('quantity[]')
 
         for product, qty in zip(products, quantities):
-            if product.strip():
-                item = LineItem(product=product, quantity=int(qty), order_id=order.id)
+            product = product.strip()
+            if product:
+                try:
+                    quantity = max(1, int(qty))
+                except (ValueError, TypeError):
+                    quantity = 1
+                item = LineItem(product=product, quantity=quantity, order_id=order.id)
                 db.session.add(item)
 
         db.session.commit()
@@ -102,13 +143,15 @@ def edit_order(id):
 
     return render_template('edit_order.html', order=order)
 
+
 # Update status only
 @app.route('/update/<int:id>', methods=['POST'])
 def update_order(id):
     order = Order.query.get_or_404(id)
-    order.status = request.form['status']
+    order.status = validate_status(request.form.get('status', 'Pending'))
     db.session.commit()
     return redirect(url_for('view_orders'))
+
 
 # Delete order
 @app.route('/delete/<int:id>', methods=['POST'])
@@ -118,9 +161,17 @@ def delete_order(id):
     db.session.commit()
     return redirect(url_for('view_orders'))
 
+
 # Create DB and run app
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
         print("✅ Database initialized at:", os.path.abspath("database.db"))
-    app.run(host="0.0.0.0", port=5000, debug=True)
+
+    # Security: Use DEBUG from environment, default to False
+    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() in ('true', '1', 'yes')
+
+    if not debug_mode:
+        print("🔒 Running in production mode (debug=False)")
+
+    app.run(host="0.0.0.0", port=5000, debug=debug_mode)

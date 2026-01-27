@@ -8,6 +8,11 @@ venv/
 # SQLite DB
 *.db
 
+# Environment files (contain secrets!)
+.env
+.env.local
+.env.production
+
 # VS Code / editor junk
 .vscode/
 .idea/
