@@ -1,6 +1,8 @@
-from flask import Flask, render_template, request, redirect, url_for, abort
+from flask import Flask, render_template, request, redirect, url_for, abort, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 import os
 import secrets
@@ -21,6 +23,13 @@ csrf = CSRFProtect(app)
 
 db = SQLAlchemy(app)
 
+# Setup Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+login_manager.login_message = 'Please log in to access this page.'
+login_manager.login_message_category = 'warning'
+
 # Valid status values (for validation)
 VALID_STATUSES = {'Pending', 'Shipped'}
 
@@ -30,6 +39,24 @@ def validate_status(status):
     if status not in VALID_STATUSES:
         return 'Pending'  # Default to Pending if invalid
     return status
+
+
+# User model for authentication
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
 
 # Order model
@@ -50,14 +77,78 @@ class LineItem(db.Model):
     order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
 
 
+# Login route
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+
+        user = User.query.filter_by(username=username).first()
+
+        if user and user.check_password(password):
+            login_user(user)
+            next_page = request.args.get('next')
+            flash('Logged in successfully!', 'success')
+            return redirect(next_page if next_page else url_for('index'))
+        else:
+            flash('Invalid username or password.', 'danger')
+
+    return render_template('login.html')
+
+
+# Logout route
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('login'))
+
+
+# Setup route (only works if no users exist)
+@app.route('/setup', methods=['GET', 'POST'])
+def setup():
+    # Only allow setup if no users exist
+    if User.query.first() is not None:
+        flash('Setup already completed.', 'warning')
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+
+        if not username or not password:
+            flash('Username and password are required.', 'danger')
+        elif len(password) < 8:
+            flash('Password must be at least 8 characters.', 'danger')
+        elif password != confirm_password:
+            flash('Passwords do not match.', 'danger')
+        else:
+            user = User(username=username)
+            user.set_password(password)
+            db.session.add(user)
+            db.session.commit()
+            flash('Account created! Please log in.', 'success')
+            return redirect(url_for('login'))
+
+    return render_template('setup.html')
+
+
 # Home route
 @app.route('/')
+@login_required
 def index():
     return render_template('index.html')
 
 
 # View all orders
 @app.route('/orders')
+@login_required
 def view_orders():
     orders = Order.query.order_by(Order.date_ordered.desc()).all()
 
@@ -72,6 +163,7 @@ def view_orders():
 
 # Add new order
 @app.route('/add', methods=['GET', 'POST'])
+@login_required
 def add_order():
     if request.method == 'POST':
         try:
@@ -112,6 +204,7 @@ def add_order():
 
 # Edit order
 @app.route('/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
 def edit_order(id):
     order = Order.query.get_or_404(id)
     if request.method == 'POST':
@@ -146,6 +239,7 @@ def edit_order(id):
 
 # Update status only
 @app.route('/update/<int:id>', methods=['POST'])
+@login_required
 def update_order(id):
     order = Order.query.get_or_404(id)
     order.status = validate_status(request.form.get('status', 'Pending'))
@@ -155,6 +249,7 @@ def update_order(id):
 
 # Delete order
 @app.route('/delete/<int:id>', methods=['POST'])
+@login_required
 def delete_order(id):
     order = Order.query.get_or_404(id)
     db.session.delete(order)
@@ -167,6 +262,10 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
         print("✅ Database initialized at:", os.path.abspath("database.db"))
+
+        # Check if setup is needed
+        if User.query.first() is None:
+            print("⚠️  No users found. Visit /setup to create your account.")
 
     # Security: Use DEBUG from environment, default to False
     debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() in ('true', '1', 'yes')
