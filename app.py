@@ -1,11 +1,12 @@
-from flask import Flask, render_template, request, redirect, url_for, abort, flash
+from flask import Flask, render_template, request, redirect, url_for, abort, flash, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 import secrets
+import requests
 
 # Set up Flask app
 app = Flask(__name__)
@@ -31,7 +32,7 @@ login_manager.login_message = 'Please log in to access this page.'
 login_manager.login_message_category = 'warning'
 
 # Valid status values (for validation)
-VALID_STATUSES = {'Pending', 'Shipped'}
+VALID_STATUSES = {'Pending', 'Shipped', 'Received'}
 
 
 def validate_status(status):
@@ -39,6 +40,16 @@ def validate_status(status):
     if status not in VALID_STATUSES:
         return 'Pending'  # Default to Pending if invalid
     return status
+
+
+def parse_float(value):
+    """Parse a float from a form field, returning None on empty/invalid input."""
+    if value in (None, ''):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 # User model for authentication
@@ -78,6 +89,7 @@ class Order(db.Model):
     vendor_platform = db.Column(db.String(100), nullable=True)
     # Category to separate different product types (optional)
     category = db.Column(db.String(50), nullable=True)
+    vendor_id = db.Column(db.Integer, db.ForeignKey('vendor.id'), nullable=True)
     # Receiving/verification
     is_verified = db.Column(db.Boolean, default=False)
     received_at = db.Column(db.DateTime, nullable=True)
@@ -93,6 +105,23 @@ class LineItem(db.Model):
     cost = db.Column(db.Float(), nullable=True)  # per-unit acquisition cost
     upc = db.Column(db.String(50), nullable=True)
     order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
+
+
+class Vendor(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    platform = db.Column(db.String(100), nullable=True)
+    contact_email = db.Column(db.String(120), nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+
+
+class Inventory(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    product = db.Column(db.String(100), nullable=False)
+    upc = db.Column(db.String(50), nullable=True)
+    quantity = db.Column(db.Integer, default=0)
+    vendor_id = db.Column(db.Integer, db.ForeignKey('vendor.id'), nullable=True)
+    notes = db.Column(db.Text, nullable=True)
 
 
 # Login route
@@ -217,6 +246,7 @@ def add_order():
             shipper = request.form.get('shipper') or None
             vendor_platform = request.form.get('vendor_platform') or None
             category = request.form.get('category') or None
+            vendor_id = request.form.get('vendor_id')
 
             # If vendor free-text is empty but vendor_id provided, derive the vendor string
             resolved_vendor = vendor
@@ -576,6 +606,19 @@ def delete_order(id):
     if order is None:
         abort(404)
     db.session.delete(order)
+    db.session.commit()
+    return redirect(url_for('view_orders'))
+
+
+# Mark order received
+@app.route('/receive/<int:id>')
+@login_required
+def receive_order(id):
+    order = db.session.get(Order, id)
+    if order is None:
+        abort(404)
+    order.status = 'Received'
+    order.received_at = datetime.utcnow()
     db.session.commit()
     return redirect(url_for('view_orders'))
 
