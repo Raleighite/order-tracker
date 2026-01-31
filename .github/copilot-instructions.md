@@ -6,7 +6,7 @@ This repository is a small Flask web app (single process) backed by SQLite. The 
 - Entrypoint: `app.py` — a single Flask app configured to use `SQLite` via `Flask-SQLAlchemy` (database file: `database.db` created next to `app.py`).
 - Templates: HTML templates live in `templates/` and follow basic Jinja2 usage (see `index.html`, `orders.html`, `add_order.html`, `edit_order.html`).
 - Static assets: `static/style.css` only; keep changes minimal and follow existing Bootstrap 5 usage.
-- Tests: `test_app.py` and `test_db.py` use `unittest` and an in-memory SQLite DB. Tests are run directly with `python test_app.py`.
+- Tests: `test_app.py` uses `unittest` and an in-memory SQLite DB. Tests are run directly with `python test_app.py`.
 - Docker: `Dockerfile` and `docker-compose.yml` provide a simple way to run the app in a container. The container runs `python app.py` and exposes port 5000.
 
 Big-picture architecture
@@ -65,7 +65,7 @@ Files to check when editing
 - `app.py` (routes, models, DB init)
 - `templates/*.html` (views)
 - `static/style.css` (styling tweaks)
-- `test_app.py`, `test_db.py` (tests to update if behavior changes)
+- `test_app.py` (tests to update if behavior changes)
 - `requirements.txt` (add new deps here)
 
 If you make a change that updates behavior or data schema
