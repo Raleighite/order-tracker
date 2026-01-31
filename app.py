@@ -234,9 +234,7 @@ def add_order():
     if request.method == 'POST':
         try:
             vendor = request.form.get('vendor', '').strip()
-            if not vendor:
-                abort(400, description="Vendor is required")
-
+            vendor_id = request.form.get('vendor_id')
             status = validate_status(request.form.get('status', 'Pending'))
             tracking_number = request.form.get('tracking_number', '').strip()
 
@@ -246,7 +244,6 @@ def add_order():
             shipper = request.form.get('shipper') or None
             vendor_platform = request.form.get('vendor_platform') or None
             category = request.form.get('category') or None
-            vendor_id = request.form.get('vendor_id')
 
             # If vendor free-text is empty but vendor_id provided, derive the vendor string
             resolved_vendor = vendor
@@ -255,6 +252,8 @@ def add_order():
                 vobj = db.session.get(Vendor, resolved_vendor_id)
                 if vobj:
                     resolved_vendor = vobj.name
+            if not resolved_vendor:
+                abort(400, description="Vendor is required")
 
             new_order = Order(
                 vendor=resolved_vendor,
