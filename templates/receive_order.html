@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Receive Order #{{ order.id }}</h2>
+<p>Vendor: {{ order.vendor }} | Platform: {{ order.vendor_platform or '-' }} | Tracking: {{ order.tracking_number or '-' }}</p>
+
+<form method="POST">
+    <table class="table">
+        <thead>
+            <tr><th>Product</th><th>Ordered</th><th>Received</th><th>Per-item Cost</th></tr>
+        </thead>
+        <tbody>
+            {% for item in order.items %}
+            <tr>
+                <td>{{ item.product }}</td>
+                <td>{{ item.quantity }}</td>
+                <td>
+                    <input class="form-control" name="received_quantity[]" type="number" min="0" value="{{ item.quantity }}">
+                </td>
+                <td>
+                    {% if item.cost %}${{ '%.2f'|format(item.cost) }}{% else %}-{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <button class="btn btn-primary">Submit Receipt</button>
+</form>
+
+{% if discrepancies is not none %}
+    <h4>Discrepancies</h4>
+    {% if discrepancies %}
+        <ul>
+            {% for d in discrepancies %}
+                <li>{{ d.item }} — ordered: {{ d.ordered }}, received: {{ d.received }}</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="text-success">All items verified.</p>
+    {% endif %}
+{% endif %}
+
+{% endblock %}
