@@ -47,8 +47,12 @@ jobs:
         run: |
           VENDOR_ID=$(python3 -c "import json,sys; print(json.load(open('vendor.json'))['id'])")
           echo "Vendor id: $VENDOR_ID"
+          CSRF=$(curl -sS -c cookies.txt http://localhost:5000/add | python3 -c "import re,sys; html=sys.stdin.read(); m=re.search(r'name=\"csrf_token\" value=\"([^\"]+)\"', html); print(m.group(1) if m else '')")
+          if [ -z "$CSRF" ]; then
+            echo "Failed to extract CSRF token"; docker logs order-tracker-ci || true; exit 1
+          fi
           STATUS=$(curl -sS -o /dev/null -w "%{http_code}" -X POST \
-            -d "vendor_id=${VENDOR_ID}&status=Pending&tracking_number=CI123&product[]=CIItem&quantity[]=1&cost[]=1.00" \
+            -b cookies.txt -d "csrf_token=${CSRF}&vendor_id=${VENDOR_ID}&status=Pending&tracking_number=CI123&product[]=CIItem&quantity[]=1&cost[]=1.00" \
             http://localhost:5000/add)
           echo "Create order returned HTTP status: $STATUS"
           if [ "$STATUS" != "302" ]; then

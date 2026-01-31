@@ -69,7 +69,12 @@ function smoke() {
   echo "Created vendor id: $VENDOR_ID"
 
   # create order
-  STATUS=$(curl -sS -o /dev/null -w "%{http_code}" -X POST "$APP_URL/add" -d "vendor_id=${VENDOR_ID}&status=Pending&tracking_number=SMOKE-CLI&product[]=SmokeItem&quantity[]=1&cost[]=4.50")
+  CSRF=$(curl -sS -c /tmp/order_tracker_cookies.txt "$APP_URL/add" | $PY -c "import re,sys; html=sys.stdin.read(); m=re.search(r'name=\"csrf_token\" value=\"([^\"]+)\"', html); print(m.group(1) if m else '')")
+  if [ -z "$CSRF" ]; then
+    echo "Failed to extract CSRF token" >&2
+    exit 1
+  fi
+  STATUS=$(curl -sS -o /dev/null -w "%{http_code}" -X POST "$APP_URL/add" -b /tmp/order_tracker_cookies.txt -d "csrf_token=${CSRF}&vendor_id=${VENDOR_ID}&status=Pending&tracking_number=SMOKE-CLI&product[]=SmokeItem&quantity[]=1&cost[]=4.50")
   echo "Create order returned $STATUS"
   if [ "$STATUS" != "302" ]; then
     echo "Failed to create order" >&2

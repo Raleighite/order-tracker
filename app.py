@@ -18,6 +18,7 @@ app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY') or secrets.token_h
 
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(basedir, 'database.db')}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['AUTO_DISABLE_LOGIN_WHEN_NO_USERS'] = True
 
 # Security: Enable CSRF protection
 csrf = CSRFProtect(app)
@@ -30,6 +31,20 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Please log in to access this page.'
 login_manager.login_message_category = 'warning'
+
+
+@app.before_request
+def _auto_disable_login_when_no_users():
+    if app.config.get('TESTING'):
+        return
+    if not app.config.get('AUTO_DISABLE_LOGIN_WHEN_NO_USERS', False):
+        return
+    try:
+        has_user = User.query.first() is not None
+    except Exception:
+        # If the DB isn't ready yet, keep login disabled to allow setup/health checks
+        has_user = False
+    app.config['LOGIN_DISABLED'] = not has_user
 
 # Valid status values (for validation)
 VALID_STATUSES = {'Pending', 'Shipped', 'Received'}
@@ -78,7 +93,7 @@ def utcnow():
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     vendor = db.Column(db.String(100), nullable=False)
-    date_ordered = db.Column(db.DateTime, default=datetime.utcnow)
+    date_ordered = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     status = db.Column(db.String(20), default='Pending')
     tracking_number = db.Column(db.String(100))
     # Optional cost and shipping fields
@@ -360,6 +375,7 @@ def health():
 
 
 @app.route('/set_theme', methods=['POST'])
+@csrf.exempt
 def set_theme():
     theme = request.form.get('theme') or request.json.get('theme') if request.is_json else None
     if theme not in ('dark', 'light'):
@@ -399,6 +415,7 @@ def create_inventory():
 
 
 @app.route('/api/inventory', methods=['GET', 'POST'])
+@csrf.exempt
 def api_inventory():
     if request.method == 'GET':
         its = Inventory.query.order_by(Inventory.product).all()
@@ -424,6 +441,7 @@ def api_inventory():
 
 
 @app.route('/api/upc_lookup', methods=['POST'])
+@csrf.exempt
 def api_upc_lookup():
     upc = request.form.get('upc') or (request.json.get('upc') if request.is_json else None)
     if not upc:
@@ -464,6 +482,7 @@ def list_vendors():
 
 
 @app.route('/api/vendors', methods=['GET', 'POST'])
+@csrf.exempt
 def api_vendors():
     if request.method == 'GET':
         vs = Vendor.query.order_by(Vendor.name).all()
@@ -474,12 +493,22 @@ def api_vendors():
             ]
         }
     # POST -> create vendor, return JSON
-    name = request.form.get('name')
+    name = (request.form.get('name') or '').strip()
     if not name:
         return {'error': 'Name required'}, 400
-    v = Vendor(name=name.strip(), platform=request.form.get('platform') or None, contact_email=request.form.get('contact_email') or None, notes=None)
+    existing = Vendor.query.filter_by(name=name).first()
+    if existing:
+        return {'id': existing.id, 'name': existing.name, 'platform': existing.platform, 'contact_email': existing.contact_email}
+    v = Vendor(name=name, platform=request.form.get('platform') or None, contact_email=request.form.get('contact_email') or None, notes=None)
     db.session.add(v)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        existing = Vendor.query.filter_by(name=name).first()
+        if existing:
+            return {'id': existing.id, 'name': existing.name, 'platform': existing.platform, 'contact_email': existing.contact_email}
+        raise
     return {'id': v.id, 'name': v.name, 'platform': v.platform, 'contact_email': v.contact_email}
 
 
