@@ -1,31 +1,63 @@
-from flask import Flask, render_template, request, redirect, url_for, abort, make_response
+from flask import Flask, render_template, request, redirect, url_for, abort, flash
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, timedelta, timezone
+from flask_wtf.csrf import CSRFProtect
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime, timedelta
 import os
-import requests
+import secrets
 
 # Set up Flask app
 app = Flask(__name__)
 basedir = os.path.abspath(os.path.dirname(__file__))
+
+# Security: SECRET_KEY from environment or generate one (for dev only)
+# In production, always set FLASK_SECRET_KEY environment variable!
+app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY') or secrets.token_hex(32)
+
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(basedir, 'database.db')}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Security: Enable CSRF protection
+csrf = CSRFProtect(app)
+
 db = SQLAlchemy(app)
 
-# Jinja filter for money
-@app.template_filter('money')
-def money_filter(v):
-    try:
-        return "${:,.2f}".format(float(v or 0.0))
-    except Exception:
-        return v
+# Setup Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+login_manager.login_message = 'Please log in to access this page.'
+login_manager.login_message_category = 'warning'
 
-# pre-defined categories for orders
-CATEGORIES = [
-    'Trading Cards',
-    '3D Printing Supplies',
-    'Trading Card Accessories',
-    'Handheld Emulators'
-]
+# Valid status values (for validation)
+VALID_STATUSES = {'Pending', 'Shipped'}
+
+
+def validate_status(status):
+    """Validate that status is an allowed value."""
+    if status not in VALID_STATUSES:
+        return 'Pending'  # Default to Pending if invalid
+    return status
+
+
+# User model for authentication
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
 
 # Order model
 def utcnow():
@@ -34,11 +66,8 @@ def utcnow():
 
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    # backward-compatible vendor string (legacy) and a normalized vendor_id FK
-    vendor = db.Column(db.String(100), nullable=True)
-    vendor_id = db.Column(db.Integer, db.ForeignKey('vendor.id'), nullable=True)
-    # Use a callable default so a new timestamp is generated per row and make it timezone-aware
-    date_ordered = db.Column(db.DateTime, default=utcnow)
+    vendor = db.Column(db.String(100), nullable=False)
+    date_ordered = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(20), default='Pending')
     tracking_number = db.Column(db.String(100))
     # Optional cost and shipping fields
@@ -56,15 +85,6 @@ class Order(db.Model):
     items = db.relationship('LineItem', backref='order', cascade="all, delete", lazy=True)
 
 
-# Vendor model
-class Vendor(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    platform = db.Column(db.String(100), nullable=True)
-    contact_email = db.Column(db.String(200), nullable=True)
-    notes = db.Column(db.Text, nullable=True)
-    orders = db.relationship('Order', backref='vendor_obj', lazy=True)
-
 # Line item model
 class LineItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -75,26 +95,81 @@ class LineItem(db.Model):
     order_id = db.Column(db.Integer, db.ForeignKey('order.id'), nullable=False)
 
 
-# Inventory model for tracking stock
-class Inventory(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    product = db.Column(db.String(200), nullable=False)
-    upc = db.Column(db.String(50), nullable=True, index=True)
-    quantity = db.Column(db.Integer, default=0)
-    vendor_id = db.Column(db.Integer, db.ForeignKey('vendor.id'), nullable=True)
-    notes = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime, default=utcnow)
+# Login route
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+
+        user = User.query.filter_by(username=username).first()
+
+        if user and user.check_password(password):
+            login_user(user)
+            next_page = request.args.get('next')
+            flash('Logged in successfully!', 'success')
+            return redirect(next_page if next_page else url_for('index'))
+        else:
+            flash('Invalid username or password.', 'danger')
+
+    return render_template('login.html')
+
+
+# Logout route
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('login'))
+
+
+# Setup route (only works if no users exist)
+@app.route('/setup', methods=['GET', 'POST'])
+def setup():
+    # Only allow setup if no users exist
+    if User.query.first() is not None:
+        flash('Setup already completed.', 'warning')
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+
+        if not username or not password:
+            flash('Username and password are required.', 'danger')
+        elif len(password) < 8:
+            flash('Password must be at least 8 characters.', 'danger')
+        elif password != confirm_password:
+            flash('Passwords do not match.', 'danger')
+        else:
+            user = User(username=username)
+            user.set_password(password)
+            db.session.add(user)
+            db.session.commit()
+            flash('Account created! Please log in.', 'success')
+            return redirect(url_for('login'))
+
+    return render_template('setup.html')
+
 
 # Home route
 @app.route('/')
+@login_required
 def index():
     return render_template('index.html')
 
+
 # View all orders
 @app.route('/orders')
+@login_required
 def view_orders():
     orders = Order.query.order_by(Order.date_ordered.desc()).all()
-    
+
     # Add "overdue" flag to orders with no shipping
     for order in orders:
         # Normalize stored datetimes: if date_ordered is naive, treat it as UTC
@@ -121,23 +196,20 @@ def view_orders():
         )
     return render_template('orders.html', orders=orders)
 
+
 # Add new order
 @app.route('/add', methods=['GET', 'POST'])
+@login_required
 def add_order():
     vendors = Vendor.query.order_by(Vendor.name).all()
     if request.method == 'POST':
         try:
-            # accept either vendor_id (preferred) or free-text vendor
-            vendor_id = request.form.get('vendor_id')
-            vendor = request.form.get('vendor')
-            status = request.form['status']
-            tracking_number = request.form['tracking_number']
-            # helper to parse optional floats
-            def parse_float(v):
-                try:
-                    return float(v) if v not in (None, '') else None
-                except Exception:
-                    return None
+            vendor = request.form.get('vendor', '').strip()
+            if not vendor:
+                abort(400, description="Vendor is required")
+
+            status = validate_status(request.form.get('status', 'Pending'))
+            tracking_number = request.form.get('tracking_number', '').strip()
 
             sales_tax = parse_float(request.form.get('sales_tax'))
             shipping_cost = parse_float(request.form.get('shipping_cost'))
@@ -174,54 +246,43 @@ def add_order():
             costs = request.form.getlist('cost[]')
             upcs = request.form.getlist('upc[]')
 
-            for idx, (product, qty) in enumerate(zip(products, quantities)):
-                if not product.strip():
+            for product, qty in zip(products, quantities):
+                product = product.strip()
+                if not product:
                     continue
                 try:
-                    quantity = int(qty)
-                except ValueError:
-                    quantity = 1  # fallback
-                # parse per-item cost if provided
-                cost = None
-                try:
-                    if idx < len(costs):
-                        c = costs[idx]
-                        cost = float(c) if c not in (None, '') else None
-                except Exception:
-                    cost = None
-
-                upc = None
-                try:
-                    if idx < len(upcs):
-                        upc = upcs[idx] or None
-                except Exception:
-                    upc = None
-
-                item = LineItem(product=product, quantity=quantity, cost=cost, upc=upc, order_id=new_order.id)
+                    quantity = max(1, int(qty))  # Ensure at least 1
+                except (ValueError, TypeError):
+                    quantity = 1
+                item = LineItem(product=product, quantity=quantity, order_id=new_order.id)
                 db.session.add(item)
 
             db.session.commit()
             return redirect(url_for('view_orders'))
         except Exception as e:
+            db.session.rollback()
             print("❌ Error while processing order:", e)
-            return render_template('add_order.html')
+            return render_template('add_order.html'), 500
 
     return render_template('add_order.html', vendors=vendors)
 
+
 # Edit order
 @app.route('/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
 def edit_order(id):
     order = db.session.get(Order, id)
     if order is None:
         abort(404)
     vendors = Vendor.query.order_by(Vendor.name).all()
     if request.method == 'POST':
-        order.vendor = request.form.get('vendor')
-        vendor_id = request.form.get('vendor_id')
-        order.category = request.form.get('category') or None
-        order.vendor_id = int(vendor_id) if vendor_id not in (None, '', '0') else None
-        order.status = request.form['status']
-        order.tracking_number = request.form['tracking_number']
+        vendor = request.form.get('vendor', '').strip()
+        if not vendor:
+            abort(400, description="Vendor is required")
+
+        order.vendor = vendor
+        order.status = validate_status(request.form.get('status', 'Pending'))
+        order.tracking_number = request.form.get('tracking_number', '').strip()
 
         LineItem.query.filter_by(order_id=order.id).delete()
         products = request.form.getlist('product[]')
@@ -229,26 +290,14 @@ def edit_order(id):
         costs = request.form.getlist('cost[]')
         upcs = request.form.getlist('upc[]')
 
-        for idx, (product, qty) in enumerate(zip(products, quantities)):
-            if product.strip():
+        for product, qty in zip(products, quantities):
+            product = product.strip()
+            if product:
                 try:
-                    quantity = int(qty)
-                except Exception:
+                    quantity = max(1, int(qty))
+                except (ValueError, TypeError):
                     quantity = 1
-                cost = None
-                try:
-                    if idx < len(costs):
-                        c = costs[idx]
-                        cost = float(c) if c not in (None, '') else None
-                except Exception:
-                    cost = None
-                upc = None
-                try:
-                    if idx < len(upcs):
-                        upc = upcs[idx] or None
-                except Exception:
-                    upc = None
-                item = LineItem(product=product, quantity=quantity, cost=cost, upc=upc, order_id=order.id)
+                item = LineItem(product=product, quantity=quantity, order_id=order.id)
                 db.session.add(item)
 
         db.session.commit()
@@ -508,60 +557,20 @@ def create_vendor():
         return redirect(url_for('add_order'))
     return render_template('vendors_new.html')
 
+
 # Update status only
 @app.route('/update/<int:id>', methods=['POST'])
+@login_required
 def update_order(id):
-    order = db.session.get(Order, id)
-    if order is None:
-        abort(404)
-    order.status = request.form['status']
+    order = Order.query.get_or_404(id)
+    order.status = validate_status(request.form.get('status', 'Pending'))
     db.session.commit()
     return redirect(url_for('view_orders'))
 
 
-# Receive order and verify items
-@app.route('/receive/<int:id>', methods=['GET', 'POST'])
-def receive_order(id):
-    order = db.session.get(Order, id)
-    if order is None:
-        abort(404)
-    if request.method == 'POST':
-        # Expect received quantities in 'received_quantity[]'
-        received = request.form.getlist('received_quantity[]')
-        discrepancies = []
-        for idx, item in enumerate(order.items):
-            try:
-                r = int(received[idx])
-            except Exception:
-                r = 0
-            if r != (item.quantity or 0):
-                discrepancies.append({'item': item.product, 'ordered': item.quantity, 'received': r})
-
-        # mark as received and verified only if no discrepancies
-        order.received_at = datetime.now(timezone.utc)
-        order.is_verified = (len(discrepancies) == 0)
-        if order.is_verified:
-            order.status = 'Received'
-            # update inventory: add quantities to Inventory for each item (by UPC if present, else product)
-            for item in order.items:
-                key_upc = item.upc
-                inv = None
-                if key_upc:
-                    inv = Inventory.query.filter_by(upc=key_upc).first()
-                if not inv:
-                    inv = Inventory.query.filter_by(product=item.product).first()
-                if not inv:
-                    inv = Inventory(product=item.product, upc=key_upc, quantity=(item.quantity or 0))
-                    db.session.add(inv)
-                else:
-                    inv.quantity = (inv.quantity or 0) + (item.quantity or 0)
-        db.session.commit()
-        return render_template('receive_order.html', order=order, discrepancies=discrepancies)
-
-    return render_template('receive_order.html', order=order, discrepancies=None)
-
 # Delete order
 @app.route('/delete/<int:id>', methods=['POST'])
+@login_required
 def delete_order(id):
     order = db.session.get(Order, id)
     if order is None:
@@ -570,9 +579,21 @@ def delete_order(id):
     db.session.commit()
     return redirect(url_for('view_orders'))
 
+
 # Create DB and run app
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
         print("✅ Database initialized at:", os.path.abspath("database.db"))
-    app.run(host="0.0.0.0", port=5000, debug=True)
+
+        # Check if setup is needed
+        if User.query.first() is None:
+            print("⚠️  No users found. Visit /setup to create your account.")
+
+    # Security: Use DEBUG from environment, default to False
+    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() in ('true', '1', 'yes')
+
+    if not debug_mode:
+        print("🔒 Running in production mode (debug=False)")
+
+    app.run(host="0.0.0.0", port=5000, debug=debug_mode)

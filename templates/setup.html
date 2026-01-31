@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-4">
+        <div class="card mt-5">
+            <div class="card-header">
+                <h4 class="mb-0">🚀 Setup Your Account</h4>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Create your admin account to get started.</p>
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        <input class="form-control" type="text" name="username" required autofocus>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        <input class="form-control" type="password" name="password" required minlength="8">
+                        <div class="form-text">At least 8 characters</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Confirm Password</label>
+                        <input class="form-control" type="password" name="confirm_password" required>
+                    </div>
+                    <button class="btn btn-success w-100">Create Account</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

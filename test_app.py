@@ -1,6 +1,6 @@
 import unittest
 
-from app import app, db, Order, LineItem, Vendor
+from app import app, db, Order, LineItem, User
 from flask import url_for
 from datetime import datetime
 
@@ -10,17 +10,37 @@ class OrderTrackerTestCase(unittest.TestCase):
         app.config["TESTING"] = True
         app.config["SQLALCHEMY_DATABASE_URI"] = 'sqlite:///:memory:'
         app.config['WTF_CSRF_ENABLED'] = False
+        app.config['LOGIN_DISABLED'] = True  # Disable login for testing
         self.client = app.test_client()
         
         with app.app_context():
             db.create_all()
+            # Create a test user
+            user = User(username='testuser')
+            user.set_password('testpass123')
+            db.session.add(user)
+            db.session.commit()
             
     def tearDown(self):
         # Get rid of all the tables after the test
         with app.app_context():
             db.drop_all()
+
+    def login(self):
+        """Helper to log in the test user."""
+        return self.client.post('/login', data={
+            'username': 'testuser',
+            'password': 'testpass123'
+        }, follow_redirects=True)
             
-    def test_home_page_loads(self):
+    def test_home_page_redirects_when_not_logged_in(self):
+        # Disable LOGIN_DISABLED temporarily
+        app.config['LOGIN_DISABLED'] = False
+        res = self.client.get('/')
+        self.assertEqual(res.status_code, 302)  # Redirect to login
+        app.config['LOGIN_DISABLED'] = True
+        
+    def test_home_page_loads_when_logged_in(self):
         res = self.client.get('/')
         self.assertEqual(res.status_code, 200)
         self.assertIn(b'Order Tracker', res.data)
@@ -29,7 +49,7 @@ class OrderTrackerTestCase(unittest.TestCase):
         # Simulate adding a new order
         res = self.client.post('/add', data={
             'vendor': "Test Vendor",
-            'status': 'pending',
+            'status': 'Pending',
             'tracking_number': '12345',
             'product[]': ['Widget A'],
             'quantity[]': ['3']
@@ -56,34 +76,43 @@ class OrderTrackerTestCase(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertIn(b'Vendor X', res.data)
 
-    def test_create_vendor_and_order(self):
-        # create a vendor via POST
-        res = self.client.post('/vendors/new', data={
-            'name': 'Vendor Y',
-            'platform': 'Webstore',
-            'contact_email': 'vendor@example.com'
+    def test_status_validation(self):
+        # Test that invalid status defaults to Pending
+        res = self.client.post('/add', data={
+            'vendor': "Test Vendor",
+            'status': 'InvalidStatus',
+            'tracking_number': '',
+            'product[]': [],
+            'quantity[]': []
         }, follow_redirects=True)
+        
+        with app.app_context():
+            order = Order.query.first()
+            self.assertEqual(order.status, 'Pending')
+
+    def test_setup_creates_user(self):
+        with app.app_context():
+            # Delete existing user for this test
+            User.query.delete()
+            db.session.commit()
+            
+        res = self.client.post('/setup', data={
+            'username': 'newadmin',
+            'password': 'securepass123',
+            'confirm_password': 'securepass123'
+        }, follow_redirects=True)
+        
         self.assertEqual(res.status_code, 200)
-
+        
         with app.app_context():
-            v = Vendor.query.filter_by(name='Vendor Y').first()
-            self.assertIsNotNone(v)
+            user = User.query.filter_by(username='newadmin').first()
+            self.assertIsNotNone(user)
+            self.assertTrue(user.check_password('securepass123'))
 
-        # create an order using vendor_id
-        with app.app_context():
-            v = Vendor.query.filter_by(name='Vendor Y').first()
-            res = self.client.post('/add', data={
-                'vendor_id': str(v.id),
-                'status': 'Pending',
-                'tracking_number': 'xyz',
-                'product[]': ['Gadget'],
-                'quantity[]': ['2']
-            }, follow_redirects=True)
-            self.assertEqual(res.status_code, 200)
-            # vendor page should show the order
-            res2 = self.client.get(f'/vendor/{v.id}')
-            self.assertEqual(res2.status_code, 200)
-            self.assertIn(b'Gadget', res2.data)
+    def test_setup_blocked_when_user_exists(self):
+        # User already exists from setUp
+        res = self.client.get('/setup', follow_redirects=True)
+        self.assertIn(b'Setup already completed', res.data)
         
 if __name__ == '__main__':
     unittest.main()
