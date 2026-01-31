@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Vendors</h2>
+<a class="btn btn-primary mb-3" href="{{ url_for('create_vendor') }}">New Vendor</a>
+<table class="table">
+    <thead>
+        <tr><th>ID</th><th>Name</th><th>Platform</th><th>Contact</th><th>Orders</th><th>Total Spend</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+        {% for v in vendors %}
+        <tr>
+            <td>{{ v.id }}</td>
+            <td><a href="{{ url_for('vendor_detail', id=v.id) }}">{{ v.name }}</a></td>
+            <td>{{ v.platform or '-' }}</td>
+            <td>{{ v.contact_email or '-' }}</td>
+            <td>{{ v.order_count }}</td>
+            <td>${{ '%.2f'|format(v.total_spend) }}</td>
+            <td>
+                <form method="POST" action="{{ url_for('delete_vendor', id=v.id) }}" style="display:inline;">
+                    <button class="btn btn-sm btn-danger" onclick="return confirm('Delete this vendor?')">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

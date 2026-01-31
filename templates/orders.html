@@ -5,6 +5,7 @@
     <thead>
         <tr>
             <th>ID</th>
+            <th>Category</th>
             <th>Vendor</th>
             <th>Platform</th>
             <th>Items</th>
@@ -19,6 +20,7 @@
         {% for order in orders %}
         <tr class="{% if order.is_overdue %}table-warning{% endif %}">
             <td>{{ order.id }}</td>
+            <td>{{ order.category or '-' }}</td>
             <td>{{ order.vendor }}</td>
             <td>{{ order.vendor_platform or '-' }}</td>
             <td>

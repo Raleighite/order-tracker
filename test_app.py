@@ -1,6 +1,6 @@
 import unittest
 
-from app import app, db, Order, LineItem
+from app import app, db, Order, LineItem, Vendor
 from flask import url_for
 from datetime import datetime
 
@@ -55,6 +55,35 @@ class OrderTrackerTestCase(unittest.TestCase):
         res = self.client.get('/orders')
         self.assertEqual(res.status_code, 200)
         self.assertIn(b'Vendor X', res.data)
+
+    def test_create_vendor_and_order(self):
+        # create a vendor via POST
+        res = self.client.post('/vendors/new', data={
+            'name': 'Vendor Y',
+            'platform': 'Webstore',
+            'contact_email': 'vendor@example.com'
+        }, follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+
+        with app.app_context():
+            v = Vendor.query.filter_by(name='Vendor Y').first()
+            self.assertIsNotNone(v)
+
+        # create an order using vendor_id
+        with app.app_context():
+            v = Vendor.query.filter_by(name='Vendor Y').first()
+            res = self.client.post('/add', data={
+                'vendor_id': str(v.id),
+                'status': 'Pending',
+                'tracking_number': 'xyz',
+                'product[]': ['Gadget'],
+                'quantity[]': ['2']
+            }, follow_redirects=True)
+            self.assertEqual(res.status_code, 200)
+            # vendor page should show the order
+            res2 = self.client.get(f'/vendor/{v.id}')
+            self.assertEqual(res2.status_code, 200)
+            self.assertIn(b'Gadget', res2.data)
         
 if __name__ == '__main__':
     unittest.main()

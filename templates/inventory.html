@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Inventory</h2>
+<a class="btn btn-primary mb-3" href="{{ url_for('create_inventory') }}">Add Inventory Item</a>
+<table class="table">
+    <thead>
+        <tr><th>ID</th><th>Product</th><th>UPC</th><th>Quantity</th><th>Vendor</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+        {% for i in items %}
+        <tr>
+            <td>{{ i.id }}</td>
+            <td>{{ i.product }}</td>
+                        <td>{{ i.upc or '-' }} {% if i.upc %}<button class="btn btn-sm btn-outline-secondary ms-2 upc-lookup-btn" data-upc="{{ i.upc }}">Lookup</button>{% endif %}</td>
+            <td>{{ i.quantity }}</td>
+            <td>{% if i.vendor_id %} <a href="{{ url_for('vendor_detail', id=i.vendor_id) }}">Vendor</a> {% else %}-{% endif %}</td>
+            <td>{{ i.notes or '' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- UPC Lookup Modal -->
+<div class="modal fade" id="upcModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">UPC Lookup</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body" id="upcModalBody">Searching...</div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.querySelectorAll('.upc-lookup-btn').forEach(btn=>{
+    btn.addEventListener('click', async (e)=>{
+        const upc = btn.dataset.upc;
+        const modalEl = document.getElementById('upcModal');
+        const body = document.getElementById('upcModalBody');
+        body.textContent = 'Searching...';
+        var modal = new bootstrap.Modal(modalEl);
+        modal.show();
+        try{
+            const res = await fetch('/api/upc_lookup', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({upc})});
+            const j = await res.json();
+            if(!res.ok){ body.textContent = j.error || 'Lookup failed'; return }
+            if(!j.items || j.items.length===0){ body.textContent = 'No results'; return }
+            const item = j.items[0];
+            body.innerHTML = `<h5>${item.title || item.description || 'Result'}</h5><p>Brand: ${item.brand || '-'}</p><p>Lowest price: ${item.lowest_recorded_price || '-'}</p><pre>${JSON.stringify(item, null, 2)}</pre>`;
+        }catch(err){ body.textContent = err.message }
+    })
+})
+</script>
+{% endblock %}

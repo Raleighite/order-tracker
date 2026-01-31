@@ -2,26 +2,31 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Order Tracker</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <!-- Navbar -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
         <div class="container-fluid">
             <a class="navbar-brand" href="{{ url_for('index') }}">📦 Order Tracker</a>
-            <div class="collapse navbar-collapse">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('index') }}">Home</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('add_order') }}">Add Order</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('view_orders') }}">View Orders</a>
-                    </li>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="mainNav">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('index') }}">Home</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('add_order') }}">Add Order</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('view_orders') }}">View Orders</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('list_vendors') }}">Vendors</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('list_inventory') }}">Inventory</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a></li>
                 </ul>
+                <div class="d-flex align-items-center">
+                    <button id="themeToggle" class="btn btn-outline-light btn-sm me-2" title="Toggle dark theme">🌙</button>
+                </div>
             </div>
         </div>
     </nav>
@@ -30,5 +35,35 @@
     <div class="container">
         {% block content %}{% endblock %}
     </div>
+</div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    // Simple theme toggle using data-theme attribute and localStorage
+    (function(){
+        const toggle = document.getElementById('themeToggle');
+        const root = document.documentElement;
+        // prefer cookie, fallback to localStorage
+        function getCookie(name){
+            const v = document.cookie.match('(^|;)\\s*'+name+'\\s*=\\s*([^;]+)');
+            return v ? v.pop() : null;
+        }
+        const saved = getCookie('theme') || localStorage.getItem('theme') || 'dark';
+        root.setAttribute('data-theme', saved);
+        toggle.textContent = saved === 'dark' ? '🌙' : '☀️';
+        async function persistTheme(next){
+            try{
+                await fetch('/set_theme', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({theme: next})});
+            }catch(e){/* ignore */}
+            localStorage.setItem('theme', next);
+        }
+        toggle.addEventListener('click', function(){
+            const cur = root.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+            const next = cur === 'dark' ? 'light' : 'dark';
+            root.setAttribute('data-theme', next);
+            toggle.textContent = next === 'dark' ? '🌙' : '☀️';
+            persistTheme(next);
+        });
+    })();
+    </script>
 </body>
 </html>

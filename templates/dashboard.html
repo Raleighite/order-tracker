@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Dashboard</h2>
+<div class="row">
+    <div class="col-md-6">
+        <canvas id="ordersChart"></canvas>
+    </div>
+    <div class="col-md-6">
+        <canvas id="spendChart"></canvas>
+    </div>
+</div>
+<div class="row mt-4">
+    <div class="col-md-12">
+        <canvas id="timeseriesChart"></canvas>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+async function fetchAndRender() {
+    const vendorsResp = await fetch('/api/dashboard/vendors');
+    const vendorsJson = await vendorsResp.json();
+    const labels = vendorsJson.labels;
+    const ordersData = vendorsJson.orders;
+    const spendData = vendorsJson.spend;
+
+    const ctx1 = document.getElementById('ordersChart');
+    new Chart(ctx1, {type:'bar', data:{labels, datasets:[{label:'Orders', data:ordersData, backgroundColor:'rgba(54,162,235,0.6)'}]}});
+
+    const ctx2 = document.getElementById('spendChart');
+    new Chart(ctx2, {type:'bar', data:{labels, datasets:[{label:'Spend', data:spendData, backgroundColor:'rgba(75,192,192,0.6)'}]}});
+
+    const timesResp = await fetch('/api/dashboard/timeseries');
+    const timesJson = await timesResp.json();
+    const ctx3 = document.getElementById('timeseriesChart');
+    new Chart(ctx3, {type:'line', data:{labels:timesJson.times, datasets:[{label:'Orders per month', data:timesJson.counts, borderColor:'rgba(153,102,255,0.8)', fill:false}]}});
+}
+
+fetchAndRender();
+</script>
+
+{% endblock %}

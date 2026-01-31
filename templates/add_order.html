@@ -4,11 +4,31 @@
 <form method="POST">
     <div class="mb-3">
         <label class="form-label">Vendor</label>
-        <input class="form-control" type="text" name="vendor" required>
+        <select class="form-control" name="vendor_id">
+            <option value="">-- choose vendor --</option>
+            {% for v in vendors %}
+            <option value="{{ v.id }}">{{ v.name }} {% if v.platform %}({{ v.platform }}){% endif %}</option>
+            {% endfor %}
+        </select>
+        <div class="d-flex justify-content-between align-items-center">
+            <small class="text-muted">Or enter a free-text vendor name below</small>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#vendorModal">+ Add vendor</button>
+        </div>
+        <input class="form-control mt-1" type="text" name="vendor" placeholder="Vendor name (fallback)">
     </div>
     <div class="mb-3">
         <label class="form-label">Tracking Number</label>
         <input class="form-control" type="text" name="tracking_number">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Category</label>
+        <select class="form-control" name="category">
+            <option value="">-- choose category --</option>
+            <option value="Trading Cards">Trading Cards</option>
+            <option value="3D Printing Supplies">3D Printing Supplies</option>
+            <option value="Trading Card Accessories">Trading Card Accessories</option>
+            <option value="Handheld Emulators">Handheld Emulators</option>
+        </select>
     </div>
     <div class="mb-3">
         <label class="form-label">Status</label>
@@ -56,6 +76,9 @@
             <div class="col">
                 <input class="form-control" name="cost[]" placeholder="Per-item cost" type="number" step="0.01">
             </div>
+            <div class="col">
+                <input class="form-control" name="upc[]" placeholder="UPC / SKU">
+            </div>
         </div>
     </div>
     <button class="btn btn-secondary mb-3" type="button" onclick="addItem()">+ Add Item</button>
@@ -74,7 +97,82 @@ function addItem() {
         <div class="col">
             <input class="form-control" name="quantity[]" placeholder="Quantity" type="number" min="1" value="1">
         </div>`;
+    // add cost and upc fields to new rows
+    const costCol = document.createElement('div'); costCol.className = 'col'; costCol.innerHTML = '<input class="form-control" name="cost[]" placeholder="Per-item cost" type="number" step="0.01">';
+    const upcCol = document.createElement('div'); upcCol.className = 'col'; upcCol.innerHTML = '<input class="form-control" name="upc[]" placeholder="UPC / SKU">';
+    row.appendChild(costCol);
+    row.appendChild(upcCol);
     document.getElementById('items').appendChild(row);
 }
+</script>
+
+<!-- Vendor modal -->
+<div class="modal fade" id="vendorModal" tabindex="-1" aria-labelledby="vendorModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="vendorModalLabel">Create Vendor</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="vendorModalError" class="alert alert-danger d-none"></div>
+                <div class="mb-3">
+                    <label class="form-label">Name</label>
+                    <input id="vendor_name" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Platform</label>
+                    <input id="vendor_platform" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Contact Email</label>
+                    <input id="vendor_contact_email" class="form-control" type="email">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button id="vendorCreateBtn" type="button" class="btn btn-primary">Create</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('vendorCreateBtn').addEventListener('click', async function () {
+    const name = document.getElementById('vendor_name').value.trim();
+    const platform = document.getElementById('vendor_platform').value.trim();
+    const contact_email = document.getElementById('vendor_contact_email').value.trim();
+    const errDiv = document.getElementById('vendorModalError');
+    if (!name) {
+        errDiv.textContent = 'Name is required';
+        errDiv.classList.remove('d-none');
+        return;
+    }
+    errDiv.classList.add('d-none');
+    try {
+        const res = await fetch('/api/vendors', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ name, platform, contact_email })
+        });
+        if (!res.ok) {
+            const j = await res.json().catch(()=>null);
+            errDiv.textContent = (j && j.error) ? j.error : 'Failed to create vendor';
+            errDiv.classList.remove('d-none');
+            return;
+        }
+        const j = await res.json();
+        const select = document.querySelector('select[name="vendor_id"]');
+        const opt = document.createElement('option');
+        opt.value = j.id; opt.textContent = j.name + (j.platform ? (' ('+j.platform+')') : '');
+        select.appendChild(opt);
+        select.value = j.id;
+        var modal = bootstrap.Modal.getInstance(document.getElementById('vendorModal'));
+        modal.hide();
+    } catch (e) {
+        errDiv.textContent = e.message;
+        errDiv.classList.remove('d-none');
+    }
+});
 </script>
 {% endblock %}

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Create Vendor</h2>
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+<form method="POST">
+    <div class="mb-3">
+        <label class="form-label">Name</label>
+        <input class="form-control" name="name" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Platform</label>
+        <input class="form-control" name="platform">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Contact Email</label>
+        <input class="form-control" name="contact_email" type="email">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Notes</label>
+        <textarea class="form-control" name="notes"></textarea>
+    </div>
+    <button class="btn btn-primary">Create Vendor</button>
+</form>
+{% endblock %}
