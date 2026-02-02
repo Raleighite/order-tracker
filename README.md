@@ -1,6 +1,7 @@
 # 📦 Order Tracker
 
-![Test Status](https://github.com/Raleighite/order-tracker/actions/workflows/python-tests.yml/badge.svg)
+![Unit Tests](https://github.com/Raleighite/order-tracker/actions/workflows/python-tests.yml/badge.svg)
+![Smoke Test](https://github.com/Raleighite/order-tracker/actions/workflows/ci-smoke.yml/badge.svg)
 
 A simple, fast, and extensible order tracking tool built with Flask and SQLite — designed to help manage and organize inventory orders for your online store.
 
@@ -36,6 +37,7 @@ This lightweight app runs locally and gives you a clear interface to view, updat
 ### 🧰 Local Setup (without Docker)
 
 1. **Clone the repo**
+
    ```bash
    git clone https://github.com/Raleighite/order-tracker.git
    cd order-tracker
@@ -71,11 +73,29 @@ This lightweight app runs locally and gives you a clear interface to view, updat
    ```
 
 2. **Run the container**
+
    ```bash
-   docker run -p 5000:5000 order-tracker
+   docker run -p 5001:5000 order-tracker
    ```
 
-3. Visit [http://localhost:5000](http://localhost:5000)
+3. Visit [http://localhost:5001](http://localhost:5001)
+
+---
+
+## Continuous Integration
+
+This repository includes two CI checks:
+
+- Unit tests: run on every push/PR (see `.github/workflows/python-tests.yml`).
+- Smoke test: a Docker-based smoke workflow (`.github/workflows/ci-smoke.yml`) builds the image, starts the container, performs a quick smoke test (create vendor, create order, verify vendor page), and fails the job if any step fails.
+
+You can run the smoke test locally with the helper script:
+
+```bash
+./scripts/dev.sh smoke
+```
+
+The smoke workflow in CI exposes the app on port 5000 within the runner; locally we avoid a common macOS port conflict by using host port 5001. Adjust the port mapping if you want to use 5000 locally.
 
 ---
 

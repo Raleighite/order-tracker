@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Add Inventory Item</h2>
+<form method="POST">
+    <div class="mb-3">
+        <label class="form-label">Product</label>
+        <input class="form-control" name="product">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">UPC</label>
+        <input class="form-control" name="upc">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Quantity</label>
+        <input class="form-control" name="quantity" type="number" value="0">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Vendor</label>
+        <select name="vendor_id" class="form-control">
+            <option value="">-- none --</option>
+            {% for v in vendors %}
+            <option value="{{ v.id }}">{{ v.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Notes</label>
+        <textarea class="form-control" name="notes"></textarea>
+    </div>
+    <button class="btn btn-primary">Add</button>
+</form>
+{% endblock %}

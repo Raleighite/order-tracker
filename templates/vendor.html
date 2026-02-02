@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Vendor: {{ vendor.name }}</h2>
+<p>Platform: {{ vendor.platform or '-' }} | Contact: {{ vendor.contact_email or '-' }}</p>
+<hr>
+<h4>Past Orders</h4>
+<table class="table">
+    <thead>
+        <tr><th>ID</th><th>Date</th><th>Status</th><th>Products</th><th>Total</th></tr>
+    </thead>
+    <tbody>
+        {% for order in orders %}
+        <tr>
+            <td>{{ order.id }}</td>
+            <td>{{ order.date_ordered.strftime('%Y-%m-%d') }}</td>
+            <td>{{ order.status }}</td>
+            <td>
+                {% for item in order.items %}
+                    <div>{{ item.product }}{% if item.quantity and item.quantity > 1 %} (x{{ item.quantity }}){% endif %}</div>
+                {% endfor %}
+            </td>
+            <td>${{ '%.2f'|format(order.order_total_cost) }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

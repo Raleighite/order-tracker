@@ -1,0 +1,42 @@
+ :root {
+	 --bg: #ffffff;
+	 --text: #111827;
+	 --muted: #6b7280;
+	 --card-bg: #f8fafc;
+	 --accent: #0d6efd;
+ }
+ 
+ [data-theme='dark'] {
+	 --bg: #0b1220;
+	 --text: #e6eef8;
+	 --muted: #9aa6b2;
+	 --card-bg: #0f1724;
+	 --accent: #66b2ff;
+ }
+ 
+ body {
+	 background: var(--bg);
+	 color: var(--text);
+ }
+ 
+ .card, .table {
+	 background: var(--card-bg);
+ }
+ 
+ .navbar-brand { font-weight: 600; }
+ 
+ /* ensure forms and tables are responsive on small screens */
+ @media (max-width: 767px) {
+	 .table thead { display: none; }
+	 .table tbody td { display: block; width: 100%; }
+	 .table tbody tr { margin-bottom: 1rem; display: block; border-bottom: 1px solid rgba(0, 0, 0, 0.06); }
+ }
+
+/* stack form item rows on small screens */
+@media (max-width: 767px){
+	.item-row { display:block; }
+	.item-row .col { width:100%; margin-bottom:0.5rem }
+}
+ 
+ /* small helpers */
+ .muted { color: var(--muted); }

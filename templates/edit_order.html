@@ -5,11 +5,28 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="mb-3">
         <label class="form-label">Vendor</label>
-        <input class="form-control" type="text" name="vendor" value="{{ order.vendor }}" required>
+        <select class="form-control" name="vendor_id">
+            <option value="">-- choose vendor --</option>
+            {% for v in vendors %}
+            <option value="{{ v.id }}" {% if order.vendor_id == v.id %}selected{% endif %}>{{ v.name }} {% if v.platform %}({{ v.platform }}){% endif %}</option>
+            {% endfor %}
+        </select>
+        <small class="text-muted">Or edit free-text vendor name below</small>
+        <input class="form-control mt-1" type="text" name="vendor" value="{{ order.vendor }}">
     </div>
     <div class="mb-3">
         <label class="form-label">Tracking Number</label>
         <input class="form-control" type="text" name="tracking_number" value="{{ order.tracking_number }}">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Category</label>
+        <select class="form-control" name="category">
+            <option value="">-- choose category --</option>
+            <option value="Trading Cards" {% if order.category == 'Trading Cards' %}selected{% endif %}>Trading Cards</option>
+            <option value="3D Printing Supplies" {% if order.category == '3D Printing Supplies' %}selected{% endif %}>3D Printing Supplies</option>
+            <option value="Trading Card Accessories" {% if order.category == 'Trading Card Accessories' %}selected{% endif %}>Trading Card Accessories</option>
+            <option value="Handheld Emulators" {% if order.category == 'Handheld Emulators' %}selected{% endif %}>Handheld Emulators</option>
+        </select>
     </div>
     <div class="mb-3">
         <label class="form-label">Status</label>
@@ -17,6 +34,32 @@
             <option value="Pending" {% if order.status == 'Pending' %}selected{% endif %}>Pending</option>
             <option value="Shipped" {% if order.status == 'Shipped' %}selected{% endif %}>Shipped</option>
         </select>
+    </div>
+
+    <div class="row">
+        <div class="col mb-3">
+            <label class="form-label">Sales Tax</label>
+            <input class="form-control" type="number" step="0.01" name="sales_tax" value="{{ order.sales_tax or '' }}">
+        </div>
+        <div class="col mb-3">
+            <label class="form-label">Shipping Cost</label>
+            <input class="form-control" type="number" step="0.01" name="shipping_cost" value="{{ order.shipping_cost or '' }}">
+        </div>
+        <div class="col mb-3">
+            <label class="form-label">Customs Tariff</label>
+            <input class="form-control" type="number" step="0.01" name="customs_tariff" value="{{ order.customs_tariff or '' }}">
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <div class="col">
+            <label class="form-label">Shipper</label>
+            <input class="form-control" name="shipper" value="{{ order.shipper or '' }}">
+        </div>
+        <div class="col">
+            <label class="form-label">Vendor Platform</label>
+            <input class="form-control" name="vendor_platform" value="{{ order.vendor_platform or '' }}">
+        </div>
     </div>
 
     <h5>Items</h5>
@@ -29,6 +72,12 @@
             <div class="col">
                 <input class="form-control" name="quantity[]" value="{{ item.quantity }}" type="number" min="1">
             </div>
+            <div class="col">
+                <input class="form-control" name="cost[]" value="{{ item.cost or '' }}" placeholder="Per-item cost" type="number" step="0.01">
+            </div>
+                <div class="col">
+                    <input class="form-control" name="upc[]" value="{{ item.upc or '' }}" placeholder="UPC / SKU">
+                </div>
         </div>
         {% endfor %}
     </div>
@@ -48,6 +97,10 @@ function addItem() {
         <div class="col">
             <input class="form-control" name="quantity[]" placeholder="Quantity" type="number" min="1" value="1">
         </div>`;
+    const costCol = document.createElement('div'); costCol.className = 'col'; costCol.innerHTML = '<input class="form-control" name="cost[]" placeholder="Per-item cost" type="number" step="0.01">';
+    const upcCol = document.createElement('div'); upcCol.className = 'col'; upcCol.innerHTML = '<input class="form-control" name="upc[]" placeholder="UPC / SKU">';
+    row.appendChild(costCol);
+    row.appendChild(upcCol);
     document.getElementById('items').appendChild(row);
 }
 </script>
